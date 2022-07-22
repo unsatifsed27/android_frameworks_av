@@ -123,6 +123,8 @@ cc_library {
         "libcameraservice_deps",
         "needs_camera_boottime_defaults",
         "camera_package_name_defaults",
+        "uses_oplus_camera_defaults",
+        "uses_nothing_camera_defaults",
     ],
     // Camera service source
 
