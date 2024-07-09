@@ -211,11 +211,17 @@ ndk::ScopedAStatus DynamicsProcessingImpl::open(const Parameter::Common& common,
     RETURN_IF(common.input.base.format.pcm != common.output.base.format.pcm ||
                       common.input.base.format.pcm != PcmType::FLOAT_32_BIT,
               EX_ILLEGAL_ARGUMENT, "dataMustBe32BitsFloat");
+    std::lock_guard lg(mImplMutex);
     RETURN_OK_IF(mState != State::INIT);
-    auto context = createContext(common);
-    RETURN_IF(!context, EX_NULL_POINTER, "createContextFailed");
+    mImplContext = createContext(common);
+    RETURN_IF(!mContext || !mImplContext, EX_NULL_POINTER, "createContextFailed");
+    RETURN_IF(!getInterfaceVersion(&mVersion).isOk(), EX_UNSUPPORTED_OPERATION,
+              "FailedToGetInterfaceVersion");
+    mImplContext->setVersion(version);
+    mEventFlag = mImplContext->getStatusEventFlag();
+    mDataMqNotEmptyEf =
+            mVersion >= kReopenSupportedVersion ? kEventFlagDataMqNotEmpty : kEventFlagNotEmpty;
 
-    RETURN_IF_ASTATUS_NOT_OK(setParameterCommon(common), "setCommParamErr");
     if (specific.has_value()) {
         RETURN_IF_ASTATUS_NOT_OK(setParameterSpecific(specific.value()), "setSpecParamErr");
     } else {
@@ -227,9 +233,10 @@ ndk::ScopedAStatus DynamicsProcessingImpl::open(const Parameter::Common& common,
     }
 
     mState = State::IDLE;
-    context->dupeFmq(ret);
-    RETURN_IF(createThread(context, getEffectName()) != RetCode::SUCCESS, EX_UNSUPPORTED_OPERATION,
-              "FailedToCreateWorker");
+    mContext->dupeFmq(ret);
+    RETURN_IF(createThread(getEffectNameWithVersion()) != RetCode::SUCCESS,
+              EX_UNSUPPORTED_OPERATION, "FailedToCreateWorker");
+    LOG(INFO) << getEffectNameWithVersion() << __func__;
     return ndk::ScopedAStatus::ok();
 }
 
